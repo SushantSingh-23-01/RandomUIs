@@ -9,7 +9,7 @@ Clean Code: Bare bone non-bloated scripts.
 
 ## 🚀 Getting Started
 
-**Not implemented (future todo's)**: Just download the neccessay libraries in scripts at the moment.
+**Not implemented (future todo's)**: At the moment, just download the neccessay libraries in scripts. I have all libraries on latest versions and not encountered any conflicts.
 
 ## 🤝 Contributing
 Contributions are always welcome! If you have an idea for a new UI, a bug report, or want to improve an existing design, please feel free to:
