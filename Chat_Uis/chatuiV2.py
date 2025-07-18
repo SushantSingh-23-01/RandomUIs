@@ -98,10 +98,6 @@ class ChatUI:
             except json.JSONDecodeError:
                 print(f'Chat File Empty/Corrupted!')
         return chat_history, chat_history, gr.Textbox(value=filename)
-
-    def _update_settings(self, system_prompt):
-        print(f'System Prompt Set to: {system_prompt}')
-        return system_prompt
     
     def _parse_chat_folder(self, chat_files_dir):
         json_file_paths = []
