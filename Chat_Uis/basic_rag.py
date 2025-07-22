@@ -183,10 +183,11 @@ class ChatUI:
         with gr.Sidebar():
             gr.Markdown("## Navigation")
             self.chat_btn = gr.Button("Chat")
+            self.docs_btn = gr.Button('Documents')
             self.settings_btn = gr.Button("Settings")
             
         # Chat Page
-        with gr.Column(visible=True) as self.chat_page: # Initially visible
+        with gr.Column(visible=True) as self.chat_page:
             gr.Markdown("### Chat Interface")
             with gr.Row():
                 self.current_chat_file = gr.Dropdown(
@@ -214,54 +215,8 @@ class ChatUI:
             self.msg = gr.Textbox(lines=1,scale=3, interactive=True, 
                                     submit_btn=True, stop_btn=True)
             
-        # Settings Page
-        with gr.Column(visible=False) as self.settings_page: # Initially hidden
-            gr.Markdown("### Settings")
-            with gr.Accordion('Model Settings', open=False):
-                self.chat_models_dropdown = gr.Dropdown(
-                    available_ollama_models(),
-                    label='Choose Chat Model',
-                    interactive=True,
-                )
-                self.emb_models_dropdown = gr.Dropdown(
-                    available_ollama_models(),
-                    label='Choose Embedding Model',
-                    interactive=True,
-                )
-                self.system_prompt_in = gr.Textbox(
-                    value='Act as a helpful assistant',
-                    label='Chat Model System Prompt',
-                    interactive=True, 
-                )
-                
-                with gr.Row():
-                    self.temp_in = gr.Slider(
-                        minimum=0,
-                        maximum=1.0,
-                        step=0.1,
-                        value=0.9,
-                        label='Temperature',
-                        interactive=True
-                    )
-                    self.top_k_in = gr.Slider(
-                        minimum=1,
-                        maximum=100,
-                        step=1,
-                        value=40,
-                        label='Top-K',
-                        interactive=True
-                    )
-                    self.top_p_in = gr.Slider(
-                        minimum=0.0,
-                        maximum=1.0,
-                        step=0.1,
-                        value=0.9,
-                        label='Top-P',
-                        interactive=True
-                    )
-                self.update_settings_btn = gr.Button('Update Model Settings', interactive=True)
-            
-            with gr.Accordion('Extra files', open=False):
+        # Documents Page
+        with gr.Column(visible=False) as self.docs_page: 
                 self.pdf_path = gr.File(
                     file_count='multiple',
                     file_types=['.pdf'],
@@ -277,14 +232,66 @@ class ChatUI:
                     self.clear_embds_btn = gr.Button('Delete Embeddings', interactive=True)
                 self.pdf_status = gr.Textbox(label='pdf status', interactive=False)
                 
+        # Settings Page
+        with gr.Column(visible=False) as self.settings_page:
+            gr.Markdown("### Settings")
+            self.chat_models_dropdown = gr.Dropdown(
+                available_ollama_models(),
+                label='Choose Chat Model',
+                interactive=True,
+            )
+            self.emb_models_dropdown = gr.Dropdown(
+                available_ollama_models(),
+                label='Choose Embedding Model',
+                interactive=True,
+            )
+            self.system_prompt_in = gr.Textbox(
+                value='Act as a helpful assistant',
+                label='Chat Model System Prompt',
+                interactive=True, 
+            )
+            
+            with gr.Row():
+                self.temp_in = gr.Slider(
+                    minimum=0,
+                    maximum=1.0,
+                    step=0.1,
+                    value=0.9,
+                    label='Temperature',
+                    interactive=True
+                )
+                self.top_k_in = gr.Slider(
+                    minimum=1,
+                    maximum=100,
+                    step=1,
+                    value=40,
+                    label='Top-K',
+                    interactive=True
+                )
+                self.top_p_in = gr.Slider(
+                    minimum=0.0,
+                    maximum=1.0,
+                    step=0.1,
+                    value=0.9,
+                    label='Top-P',
+                    interactive=True
+                )
+            self.update_settings_btn = gr.Button('Update Model Settings', interactive=True)
+
+
+                
     def _events(self):
         self.chat_btn.click(
-            fn=lambda: (gr.update(visible=True), gr.update(visible=False)),
-            outputs=[self.chat_page, self.settings_page]
+            fn=lambda: (gr.update(visible=True), gr.update(visible=False), gr.update(visible=False)),
+            outputs=[self.chat_page, self.docs_page, self.settings_page]
+        )
+        self.docs_btn.click(
+            fn=lambda: (gr.update(visible=False), gr.update(visible=True), gr.update(visible=False)),
+            outputs=[self.chat_page, self.docs_page, self.settings_page]
         )
         self.settings_btn.click(
-            fn=lambda: (gr.update(visible=False), gr.update(visible=True)),
-            outputs=[self.chat_page, self.settings_page]
+            fn=lambda: (gr.update(visible=False), gr.update(visible=False), gr.update(visible=True)),
+            outputs=[self.chat_page, self.docs_page, self.settings_page]
         )
         
         self.process_pdf_btn.click(
