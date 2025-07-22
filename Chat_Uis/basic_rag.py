@@ -138,8 +138,9 @@ def regen_response(history, shared_state):
     if len(history) >= 2 and history[-1]['role'] == 'assistant':
         history.pop()
         message = history.pop()['content']
-        _, history, history = ollama_response(message, history, shared_state)
-    
+        response_generator = ollama_response(message, history, shared_state)
+        for current_in, current_hist, current_chat_display in response_generator:
+            yield current_in, current_hist, current_chat_display
     return '', history, history
 
 def toggle_rag_enable(shared_state, toggle):
