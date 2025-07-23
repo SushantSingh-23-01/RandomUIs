@@ -17,6 +17,7 @@ chroma_collection = client.get_or_create_collection('docs')
 class SharedState:
     cwd:str = os.path.dirname(os.path.realpath(__file__))
     chats_dir:str = os.path.join(cwd, 'chats')
+    profiles_path:str = os.path.join(cwd, 'profiles.json')
     
     chat_model:str = r'hf.co/mlabonne/gemma-3-4b-it-abliterated-GGUF:Q4_K_M'
     emb_model:str = r'granite-embedding:latest'
@@ -225,7 +226,7 @@ def pull_ollama_model(name):
     return (gr.Dropdown(available_ollama_models()), gr.Dropdown(available_ollama_models()), 
              gr.Dropdown(available_ollama_models()), gr.Textbox(msg))
 
-def delete_ollama_model(name):
+def remove_ollama_model(name):
     command = ['ollama', 'rm', name]
     try:
         process = subprocess.run(command, check=True)
@@ -237,42 +238,80 @@ def delete_ollama_model(name):
         msg = f'Ollama not found.'
     return (gr.Dropdown(available_ollama_models()), gr.Dropdown(available_ollama_models()), 
              gr.Dropdown(available_ollama_models()), gr.Textbox(msg))
+
+def load_all_profiles(file_path):
+    if not os.path.exists(file_path):
+        return {}
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            profiles = json.load(f)
+            if not isinstance(profiles, dict):
+                print(f"Warning: {file_path} content is not a dictionary. Initializing empty profiles.")
+                return {}
+            return profiles
+    except json.JSONDecodeError:
+        print(f"Warning: {file_path} is corrupted. Initializing empty profiles.")
+        return {}
+
+def save_all_profiles(profiles_data,  shared_state):
+    file_path = shared_state.profiles_path
+    try:
+        with open(file_path, 'w', encoding='utf-8') as f:
+            json.dump(profiles_data, f, indent=4)
+    except Exception as e:
+        print(f"Error saving profiles to {file_path}: {e}")
     
 def save_profile(shared_state, profile_name):
-    if profile_name:
-        data = {
-            'model_name': shared_state.chat_model,
-            'system_prompt': shared_state.system_prompt,
-            'temperature': shared_state.temperature,
-            'top_k': shared_state.top_k,
-            'top_p': shared_state.top_p
-        }
-        filepath = os.path.join(shared_state.cwd, 'profiles', profile_name)
-        filepath = filepath + '.json' if not filepath.endswith('json') else filepath
-        with open(filepath, 'w', encoding='utf-8') as f:
-            json.dump(data, f, indent=4)
-        msg = f'Saved profile :{profile_name}'
-    else:
-        msg = 'Provide File Name'
-    update_profile_list = [f for f in os.listdir(os.path.join(shared_state.cwd, 'profiles')) if f.endswith('json')]
-    return gr.Dropdown(update_profile_list), gr.Textbox(msg)
+    if not profile_name.strip():
+        return "Error: Profile name cannot be empty."
+    
+    all_profiles = load_all_profiles(shared_state.profiles_path)
+
+    data = {
+        'chat_model': shared_state.chat_model,
+        'system_prompt': shared_state.system_prompt,
+        'temperature': shared_state.temperature,
+        'top_k': shared_state.top_k,
+        'top_p': shared_state.top_p
+    }
+    all_profiles[profile_name] = data
+    save_all_profiles(all_profiles, shared_state)
+    return (gr.Dropdown(list(all_profiles.keys()), value=profile_name),
+            gr.Textbox(f'Profile {profile_name} saved successfully.'))
 
 def load_profile(shared_state, profile_name):
-    filepath = os.path.join(shared_state.cwd, 'profiles', profile_name)
-    with open(filepath, 'r', encoding='utf-8') as f:
-        data = json.load(f)
+    all_profiles = load_all_profiles(shared_state.profiles_path)
 
-    if data:
-        shared_state.chat_model = data['chat_model']
-        shared_state.system_prompt = data['system_prompt']
-        shared_state.temperature = data['temperature']
-        shared_state.top_k = data['top_k']
-        shared_state.top_p = data['top_p']
-        msg = 'Loaded Profile'
+    if profile_name in all_profiles:
+        shared_state.chat_model = all_profiles[profile_name]['chat_model']
+        shared_state.system_prompt = all_profiles[profile_name]['system_prompt']
+        shared_state.temperature = all_profiles[profile_name]['temperature']
+        shared_state.top_k = all_profiles[profile_name]['top_k']
+        shared_state.top_p = all_profiles[profile_name]['top_p']
+        msg = f'Loaded Profile {profile_name}.'
     else:
-        msg = 'Profile Corrupted/Empty'
+        msg = f'Error: Profile {profile_name} not found.'
     return shared_state, gr.Textbox(msg)
 
+def delete_profile(shared_state, profile_name):
+    if not profile_name or not profile_name.strip(): # Check for None or empty string
+        return (gr.Dropdown(choices=list(load_all_profiles(shared_state.profiles_path).keys()), value=None), 
+                gr.Textbox(''),
+               gr.Textbox("Error: Profile name cannot be empty.", visible=True))
+
+    all_profiles = load_all_profiles(shared_state.profiles_path)
+    
+    if profile_name in all_profiles:
+        del all_profiles[profile_name]
+
+        save_all_profiles(all_profiles, shared_state.profiles_path)
+        status_msg = f"Profile '{profile_name}' deleted successfully."
+    else:
+        status_msg = f"Error: Profile '{profile_name}' not found. Nothing to delete."
+
+    return (gr.Dropdown(choices=list(all_profiles.keys()), value=None),
+            gr.Textbox(''),
+           gr.Textbox(status_msg, visible=True))
 class ChatUI:
     def __init__(self, shared_state):
         self.shared_state = shared_state
@@ -284,20 +323,20 @@ class ChatUI:
     def _interface(self):
         with gr.Sidebar():
             gr.Markdown("## Navigation")
-            self.chat_btn = gr.Button("Chat")
-            self.docs_btn = gr.Button('Documents')
-            self.settings_btn = gr.Button("Settings")
+            self.chat_tab_btn = gr.Button("Chat")
+            self.docs_tab_btn = gr.Button('Documents')
+            self.settings_tab_btn = gr.Button("Settings")
             
         # Chat Page
         with gr.Column(visible=True) as self.chat_page:
             gr.Markdown("### Chat Interface")
             with gr.Row():
-                self.current_chat_file = gr.Dropdown(
+                self.chats_dropdown = gr.Dropdown(
                     choices=[f for f in os.listdir('chats') if f.endswith('json')],
                     label='Chat Files',
                     interactive=True
                 )
-                self.chat_save_name = gr.Textbox(label='Chat Save Name', interactive=True)
+                self.new_chat_name = gr.Textbox(label='Chat Save Name', interactive=True)
             
             with gr.Row():
                 self.load_chat_btn = gr.Button(value='Load Chat', size='md')
@@ -311,15 +350,15 @@ class ChatUI:
                 )
             
             with gr.Row():
-                self.clear_btn = gr.Button('Clear', interactive=True,size='md')
-                self.regen_btn = gr.Button('Regenerate', interactive=True, size='md')
-                self.enable_rag = gr.Checkbox(False, label='Enable RAG')
+                self.clear_chat_btn = gr.Button('Clear', interactive=True,size='md')
+                self.regen_message_btn = gr.Button('Regenerate', interactive=True, size='md')
+                self.enable_rag_chkbox = gr.Checkbox(False, label='Enable RAG')
             self.msg = gr.Textbox(lines=1,scale=3, interactive=True, 
                                     submit_btn=True, stop_btn=True)
             
         # Documents Page
         with gr.Column(visible=False) as self.docs_page: 
-                self.pdf_path = gr.File(
+                self.pdf_path_in = gr.File(
                     file_count='multiple',
                     file_types=['.pdf'],
                     label='PDF file',
@@ -329,10 +368,10 @@ class ChatUI:
                                                 step=1, label='Chunk Size', interactive=True)
                     self.chunk_overlap = gr.Slider(minimum=0, maximum=128, value=64, 
                                                 step=1, label='Chunk Overlap', interactive=True)
-                    self.split_tech = gr.Dropdown(
+                    self.chunking_method = gr.Dropdown(
                         choices=['simple', 'paragraph'],
                         value='paragraph',
-                        label='Splitting Technique',
+                        label='Chunking Method',
                         interactive=True
                     )
                 with gr.Row():
@@ -354,21 +393,17 @@ class ChatUI:
                     label='Choose Embedding Model',
                     interactive=True,
                 )
-            
+
+                self.chats_dir_input = gr.Textbox(value = 'chats', label='Chats Directory', interactive=True)
+                self.profiles_path_input = gr.Textbox(value='profiles.json',label='Profiles', interactive=True)
+                
             with gr.Accordion('Model Settings', open=False):
-                with gr.Row():
-                    self.profile_dropdown = gr.Dropdown(
-                        choices=[f for f in os.listdir('profiles') if f.endswith('json')],
-                        label='Available Profiles',
-                        interactive=True
-                    )
-                    self.load_profile_btn = gr.Button('Load Profile')
                 self.system_prompt_in = gr.Textbox(
                     value='Act as a helpful assistant',
                     label='Chat Model System Prompt',
                     interactive=True, 
                 )
-                
+                    
                 with gr.Row():
                     self.temp_in = gr.Slider(
                         minimum=0,
@@ -393,21 +428,32 @@ class ChatUI:
                         value=0.9,
                         label='Top-P',
                         interactive=True
-                    )
+                    )          
+                
                 with gr.Row():
-                    self.new_profile_in = gr.Textbox(label='New Profile Name', interactive=True)
-                    self.save_profile_btn = gr.Button('save Profile')
+                    self.profiles_dropdown = gr.Dropdown(
+                        choices=list(load_all_profiles('profiles.json')),
+                        label='Available Profiles',
+                        interactive=True
+                    )
+                    self.new_profile_name = gr.Textbox(label='New Profile Name', interactive=True)
                     
+                with gr.Row():
+                    self.save_profile_btn = gr.Button('save Profile')
+                    self.load_profile_btn = gr.Button('Load Profile')
+                    self.delete_profile_btn = gr.Button('Delete Profile')
+            
+                
             with gr.Accordion('Model Downloading and Removing', open=False):
                 with gr.Row():
-                    self.download_model_in = gr.Textbox(
+                    self.download_model_name = gr.Textbox(
                         label='Checkpoint Name/ HF Directory',
                         placeholder='hf.co/ggml-org/SmolLM3-3B-GGUF:Q4_K_M',
                         interactive=True, 
                     )
                     self.download_model_btn = gr.Button('Download Model', interactive=True)
                 with gr.Row():
-                    self.delete_model_in = gr.Dropdown(
+                    self.delete_model_name = gr.Dropdown(
                         choices=available_ollama_models(),
                         label='Name of checkpoint to delete',
                         interactive=True
@@ -418,23 +464,23 @@ class ChatUI:
 
                 
     def _events(self):
-        self.chat_btn.click(
+        self.chat_tab_btn.click(
             fn=lambda: (gr.update(visible=True), gr.update(visible=False), gr.update(visible=False)),
             outputs=[self.chat_page, self.docs_page, self.settings_page]
         )
-        self.docs_btn.click(
+        self.docs_tab_btn.click(
             fn=lambda: (gr.update(visible=False), gr.update(visible=True), gr.update(visible=False)),
             outputs=[self.chat_page, self.docs_page, self.settings_page]
         )
-        self.settings_btn.click(
+        self.settings_tab_btn.click(
             fn=lambda: (gr.update(visible=False), gr.update(visible=False), gr.update(visible=True)),
             outputs=[self.chat_page, self.docs_page, self.settings_page]
         )
         
         self.process_pdf_btn.click(
             fn=embed_pdfs,
-            inputs=[self.pdf_path, self.shared_state, self.chunk_size, 
-                    self.chunk_overlap, self.split_tech],
+            inputs=[self.pdf_path_in, self.shared_state, self.chunk_size, 
+                    self.chunk_overlap, self.chunking_method],
             outputs=[self.pdf_status]
         )
         self.msg.submit(
@@ -444,32 +490,32 @@ class ChatUI:
         )
         self.save_chat_btn.click(
             save_chat,
-            [self.history, self.chat_save_name, self.shared_state],
-            [self.current_chat_file, self.chat_save_name]
+            [self.history, self.new_chat_name, self.shared_state],
+            [self.chats_dropdown, self.new_chat_name]
         )
         self.load_chat_btn.click(
             load_chat,
-            [self.current_chat_file, self.shared_state],
-            [self.history, self.chatbot, self.shared_state, self.chat_save_name]
+            [self.chats_dropdown, self.shared_state],
+            [self.history, self.chatbot, self.shared_state, self.new_chat_name]
         )
         self.delete_chat_btn.click(
             delete_chat,
-            [self.current_chat_file, self.shared_state],
-            [self.history, self.chatbot, self.current_chat_file, self.chat_save_name]
+            [self.chats_dropdown, self.shared_state],
+            [self.history, self.chatbot, self.chats_dropdown, self.new_chat_name]
         )
-        self.clear_btn.click(
+        self.clear_chat_btn.click(
             lambda: ([], []),
             outputs=[self.history, self.chatbot]
         )
-        self.regen_btn.click(
+        self.regen_message_btn.click(
             regen_response,
             [self.history, self.shared_state],
             [self.msg, self.history, self.chatbot]
         )
 
-        self.enable_rag.change(
+        self.enable_rag_chkbox.change(
             toggle_rag_enable,
-            [self.shared_state, self.enable_rag],
+            [self.shared_state, self.enable_rag_chkbox],
             [self.shared_state]
         )
         self.update_settings_btn.click(
@@ -484,25 +530,30 @@ class ChatUI:
         )
         self.download_model_btn.click(
             pull_ollama_model,
-            [self.download_model_in],
+            [self.download_model_name],
             [self.chat_models_dropdown, self.emb_models_dropdown, 
-             self.delete_model_in, self.settings_status]
+             self.delete_model_name, self.settings_status]
         )
         self.delete_model_btn.click(
-            delete_ollama_model,
-            [self.delete_model_in],
+            remove_ollama_model,
+            [self.delete_model_name],
             [self.chat_models_dropdown, self.emb_models_dropdown, 
-             self.delete_model_in, self.settings_status]
+             self.delete_model_name, self.settings_status]
         )
         self.load_profile_btn.click(
             load_profile,
-            [self.shared_state, self.profile_dropdown],
+            [self.shared_state, self.profiles_dropdown],
             [self.shared_state, self.settings_status]
         )
         self.save_profile_btn.click(
             save_profile,
-            [self.shared_state, self.new_profile_in],
-            [self.profile_dropdown, self.settings_status]
+            [self.shared_state, self.new_profile_name],
+            [self.profiles_dropdown, self.settings_status]
+        )
+        self.delete_profile_btn.click(
+            delete_profile,
+            [self.shared_state, self.new_chat_name],
+            [self.profiles_dropdown, self.new_chat_name, self.settings_status]
         )
 
 with gr.Blocks() as demo:
