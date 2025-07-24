@@ -304,7 +304,7 @@ def delete_profile(shared_state, profile_name):
     if profile_name in all_profiles:
         del all_profiles[profile_name]
 
-        save_all_profiles(all_profiles, shared_state.profiles_path)
+        save_all_profiles(all_profiles, shared_state)
         status_msg = f"Profile '{profile_name}' deleted successfully."
     else:
         status_msg = f"Error: Profile '{profile_name}' not found. Nothing to delete."
@@ -312,6 +312,7 @@ def delete_profile(shared_state, profile_name):
     return (gr.Dropdown(choices=list(all_profiles.keys()), value=None),
             gr.Textbox(''),
            gr.Textbox(status_msg, visible=True))
+    
 class ChatUI:
     def __init__(self, shared_state):
         self.shared_state = shared_state
@@ -500,7 +501,7 @@ class ChatUI:
         )
         self.delete_chat_btn.click(
             delete_chat,
-            [self.chats_dropdown, self.shared_state],
+            [self.new_chat_name, self.shared_state],
             [self.history, self.chatbot, self.chats_dropdown, self.new_chat_name]
         )
         self.clear_chat_btn.click(
@@ -552,8 +553,8 @@ class ChatUI:
         )
         self.delete_profile_btn.click(
             delete_profile,
-            [self.shared_state, self.new_chat_name],
-            [self.profiles_dropdown, self.new_chat_name, self.settings_status]
+            [self.shared_state, self.new_profile_name],
+            [self.profiles_dropdown, self.new_profile_name, self.settings_status]
         )
 
 with gr.Blocks() as demo:
